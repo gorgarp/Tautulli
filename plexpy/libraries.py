@@ -239,7 +239,7 @@ class Libraries(object):
     def __init__(self):
         pass
 
-    def get_datatables_list(self, kwargs=None):
+    def get_datatables_list(self, kwargs=None, grouping=None):
         default_return = {'recordsFiltered': 0,
                           'recordsTotal': 0,
                           'draw': 0,
@@ -250,8 +250,13 @@ class Libraries(object):
 
         custom_where = [['library_sections.deleted_section', 0]]
 
+        if grouping is None:
+            grouping = plexpy.CONFIG.GROUP_HISTORY_TABLES
+
         if session.get_session_shared_libraries():
             custom_where.append(['library_sections.section_id', session.get_session_shared_libraries()])
+
+        group_by = 'session_history.reference_id' if grouping else 'session_history.id'
 
         columns = ['library_sections.section_id',
                    'library_sections.section_name',
@@ -262,7 +267,7 @@ class Libraries(object):
                    'library_sections.thumb AS library_thumb',
                    'library_sections.custom_thumb_url AS custom_thumb',
                    'library_sections.art',
-                   'COUNT(session_history.id) AS plays',
+                   'COUNT(DISTINCT %s) AS plays' % group_by,
                    'SUM(CASE WHEN session_history.stopped > 0 THEN (session_history.stopped - session_history.started) \
                     ELSE 0 END) - SUM(CASE WHEN session_history.paused_counter IS NULL THEN 0 ELSE \
                     session_history.paused_counter END) AS duration',
@@ -533,7 +538,7 @@ class Libraries(object):
         # Search results
         search_value = json_data['search']['value'].lower()
         if search_value:
-            searchable_columns = [d['data'] for d in json_data['columns'] if d['searchable']]
+            searchable_columns = [d['data'] for d in json_data['columns'] if d['searchable']] + ['title']
             for row in rows:
                 for k,v in row.iteritems():
                     if k in searchable_columns and search_value in v.lower():
@@ -690,10 +695,11 @@ class Libraries(object):
                           'child_count': 0,
                           'do_notify': 0,
                           'do_notify_created': 0,
-                          'keep_history': 1
+                          'keep_history': 1,
+                          'deleted_section': 0
                           }
 
-        if not section_id:
+        if not section_id or helpers.cast_to_int(section_id) <= 0:
             return default_return
 
         def get_library_details(section_id=section_id):
@@ -703,7 +709,7 @@ class Libraries(object):
                 if str(section_id).isdigit():
                     query = 'SELECT section_id, section_name, section_type, count, parent_count, child_count, ' \
                             'thumb AS library_thumb, custom_thumb_url AS custom_thumb, art, ' \
-                            'do_notify, do_notify_created, keep_history ' \
+                            'do_notify, do_notify_created, keep_history, deleted_section ' \
                             'FROM library_sections ' \
                             'WHERE section_id = ? '
                     result = monitor_db.select(query, args=[section_id])
@@ -733,7 +739,8 @@ class Libraries(object):
                                        'child_count': item['child_count'],
                                        'do_notify': item['do_notify'],
                                        'do_notify_created': item['do_notify_created'],
-                                       'keep_history': item['keep_history']
+                                       'keep_history': item['keep_history'],
+                                       'deleted_section': item['deleted_section']
                                        }
             return library_details
 
@@ -924,7 +931,8 @@ class Libraries(object):
         monitor_db = database.MonitorDatabase()
 
         try:
-            query = 'SELECT section_id, section_name, section_type, agent FROM library_sections WHERE deleted_section = 0'
+            query = 'SELECT section_id, section_name, section_type, agent ' \
+                    'FROM library_sections WHERE deleted_section = 0'
             result = monitor_db.select(query=query)
         except Exception as e:
             logger.warn(u"Tautulli Libraries :: Unable to execute database query for get_sections: %s." % e)
@@ -1001,23 +1009,31 @@ class Libraries(object):
 
         try:
             if section_id and section_id.isdigit():
-                logger.info(u"Tautulli Libraries :: Re-adding library with id %s to database." % section_id)
-                monitor_db.action('UPDATE library_sections SET deleted_section = 0 WHERE section_id = ?', [section_id])
-                monitor_db.action('UPDATE library_sections SET keep_history = 1 WHERE section_id = ?', [section_id])
-                monitor_db.action('UPDATE library_sections SET do_notify = 1 WHERE section_id = ?', [section_id])
-                monitor_db.action('UPDATE library_sections SET do_notify_created = 1 WHERE section_id = ?', [section_id])
+                query = 'SELECT * FROM library_sections WHERE section_id = ?'
+                result = monitor_db.select(query=query, args=[section_id])
+                if result:
+                    logger.info(u"Tautulli Libraries :: Re-adding library with id %s to database." % section_id)
+                    monitor_db.action('UPDATE library_sections SET deleted_section = 0 WHERE section_id = ?', [section_id])
+                    monitor_db.action('UPDATE library_sections SET keep_history = 1 WHERE section_id = ?', [section_id])
+                    monitor_db.action('UPDATE library_sections SET do_notify = 1 WHERE section_id = ?', [section_id])
+                    monitor_db.action('UPDATE library_sections SET do_notify_created = 1 WHERE section_id = ?', [section_id])
+                    return True
+                else:
+                    return False
 
-                return 'Re-added library with id %s.' % section_id
             elif section_name:
-                logger.info(u"Tautulli Libraries :: Re-adding library with name %s to database." % section_name)
-                monitor_db.action('UPDATE library_sections SET deleted_section = 0 WHERE section_name = ?', [section_name])
-                monitor_db.action('UPDATE library_sections SET keep_history = 1 WHERE section_name = ?', [section_name])
-                monitor_db.action('UPDATE library_sections SET do_notify = 1 WHERE section_name = ?', [section_name])
-                monitor_db.action('UPDATE library_sections SET do_notify_created = 1 WHERE section_name = ?', [section_name])
+                query = 'SELECT * FROM library_sections WHERE section_name = ?'
+                result = monitor_db.select(query=query, args=[section_name])
+                if result:
+                    logger.info(u"Tautulli Libraries :: Re-adding library with name %s to database." % section_name)
+                    monitor_db.action('UPDATE library_sections SET deleted_section = 0 WHERE section_name = ?', [section_name])
+                    monitor_db.action('UPDATE library_sections SET keep_history = 1 WHERE section_name = ?', [section_name])
+                    monitor_db.action('UPDATE library_sections SET do_notify = 1 WHERE section_name = ?', [section_name])
+                    monitor_db.action('UPDATE library_sections SET do_notify_created = 1 WHERE section_name = ?', [section_name])
+                    return True
+                else:
+                    return False
 
-                return 'Re-added library with section_name %s.' % section_name
-            else:
-                return 'Unable to re-add library, section_id or section_name not valid.'
         except Exception as e:
             logger.warn(u"Tautulli Libraries :: Unable to execute database query for undelete: %s." % e)
 

@@ -218,7 +218,7 @@ DOCUMENTATION :: END
                                     % if data['stream_container_decision'] == 'transcode':
                                     Transcode (${data['container'].upper()} <i class="fa fa-long-arrow-right"></i> ${data['stream_container'].upper()})
                                     % else:
-                                    Direct Play (${data['container'].upper()})
+                                    Direct Play (${data['stream_container'].upper()})
                                     % endif
                                 </div>
                             </li>
@@ -236,7 +236,7 @@ DOCUMENTATION :: END
                                         % elif data['stream_video_decision'] == 'copy':
                                         Direct Stream (${data['stream_video_codec'].upper()} ${VIDEO_RESOLUTION_OVERRIDES.get(data['stream_video_resolution'], data['stream_video_resolution'])})
                                         % else:
-                                        Direct Play (${data['video_codec'].upper()} ${VIDEO_RESOLUTION_OVERRIDES.get(data['video_resolution'], data['video_resolution'])})
+                                        Direct Play (${data['stream_video_codec'].upper()} ${VIDEO_RESOLUTION_OVERRIDES.get(data['stream_video_resolution'], data['stream_video_resolution'])})
                                         % endif
                                     % elif data['media_type'] == 'photo':
                                     Direct Play (${data['width']}x${data['height']})
@@ -253,7 +253,7 @@ DOCUMENTATION :: END
                                     % elif data['stream_audio_decision'] == 'copy':
                                     Direct Stream (${AUDIO_CODEC_OVERRIDES.get(data['stream_audio_codec'], data['stream_audio_codec'].upper())} ${data['stream_audio_channel_layout'].split('(')[0].capitalize()})
                                     % else:
-                                    Direct Play (${AUDIO_CODEC_OVERRIDES.get(data['audio_codec'], data['audio_codec'].upper())} ${data['audio_channel_layout'].split('(')[0].capitalize()})
+                                    Direct Play (${AUDIO_CODEC_OVERRIDES.get(data['stream_audio_codec'], data['stream_audio_codec'].upper())} ${data['stream_audio_channel_layout'].split('(')[0].capitalize()})
                                     % endif
                                 </div>
                             </li>
@@ -270,7 +270,7 @@ DOCUMENTATION :: END
                                         % elif data['stream_subtitle_decision'] == 'burn':
                                         Burn (${data['subtitle_codec'].upper()})
                                         % else:
-                                        Direct Play (${data['stream_subtitle_codec'].upper() if data['synced_version'] else data['subtitle_codec'].upper()})
+                                        Direct Play (${data['subtitle_codec'].upper() if data['synced_version'] else data['stream_subtitle_codec'].upper()})
                                         % endif
                                     % else:
                                     None
@@ -283,10 +283,17 @@ DOCUMENTATION :: END
                             <li class="dashboard-activity-info-item">
                                 <div class="sub-heading">Location</div>
                                 <div class="sub-value time-right">
+                                    % if data['secure'] is not None:
+                                    % if data['secure']:
+                                    <span data-toggle="tooltip" title="Secure Connection"><i class="fa fa-lock"></i></span>
+                                    % else:
+                                    <span data-toggle="tooltip" title="Insecure Connection"><i class="fa fa-unlock"></i></span>
+                                    % endif
+                                    % endif
                                     <span id="location-${sk}">${data['location'].upper()}</span>:
                                     % if data['ip_address'] != 'N/A':
                                     <span class="ip-container"><span class="ip-address">${data['ip_address']}</span></span>
-                                        % if data['relay']:
+                                        % if data['relayed']:
                                         <span data-toggle="tooltip" title="Plex Relay"><i class="fa fa-exclamation-circle"></i></span>
                                         % else:
                                         <a href="#" class="external_ip-modal" data-toggle="modal" data-target="#ip-info-modal" data-ip="${data['ip_address']}">
@@ -317,7 +324,7 @@ DOCUMENTATION :: END
                                             bw = str(bw) + ' kbps'
                                     %>
                                     <span id="stream-bandwidth-${sk}">${bw}</span>
-                                    <span id="streaming-brain-${sk}" data-toggle="tooltip" title="Streaming Brain Estimate (Required Bandwidth)"><i class="fa fa-info-circle"></i></span>
+                                    <span id="streaming-brain-${sk}" data-toggle="tooltip" title="Streaming Brain Estimate (Reserved Bandwidth)"><i class="fa fa-info-circle"></i></span>
                                     % elif data['synced_version'] == 1 or data['channel_stream'] == 1:
                                     <span id="stream-bandwidth-${sk}">None</span>
                                     % else:

@@ -101,7 +101,7 @@ class PmsConnect(object):
 
         Output: array
         """
-        uri = '/status/sessions/terminate?sessionId=%s&reason=%s' % (session_id, reason)
+        uri = '/status/sessions/terminate?sessionId=%s&reason=%s' % (session_id, urllib.quote_plus(reason))
         request = self.request_handler.make_request(uri=uri,
                                                     request_type='GET',
                                                     output_format=output_format)
@@ -446,7 +446,10 @@ class PmsConnect(object):
 
         Output: array
         """
-        if media_type in ('movie', 'show', 'artist', 'other_video'):
+        media_types = ('movie', 'show', 'artist', 'other_video')
+        recents_list = []
+
+        if media_type in media_types:
             other_video = False
             if media_type == 'movie':
                 media_type = '1'
@@ -461,15 +464,18 @@ class PmsConnect(object):
         elif section_id:
             recent = self.get_library_recently_added(section_id, start, count, output_format='xml')
         else:
-            recent = self.get_recently_added(start, count, output_format='xml')
+            for media_type in media_types:
+                recents = self.get_recently_added_details(start, count, media_type)
+                recents_list += recents['recently_added']
+
+            output = {'recently_added': sorted(recents_list, key=lambda k: k['added_at'], reverse=True)[:int(count)]}
+            return output
 
         try:
             xml_head = recent.getElementsByTagName('MediaContainer')
         except Exception as e:
             logger.warn(u"Tautulli Pmsconnect :: Unable to parse XML for get_recently_added: %s." % e)
             return []
-
-        recents_list = []
 
         for a in xml_head:
             if a.getAttribute('size'):
@@ -1504,7 +1510,9 @@ class PmsConnect(object):
                           'player': helpers.get_xml_attr(player_info, 'title') or helpers.get_xml_attr(player_info, 'product'),
                           'machine_id': helpers.get_xml_attr(player_info, 'machineIdentifier'),
                           'state': helpers.get_xml_attr(player_info, 'state'),
-                          'local': helpers.get_xml_attr(player_info, 'local')
+                          'local': int(helpers.get_xml_attr(player_info, 'local') == '1'),
+                          'relayed': helpers.get_xml_attr(player_info, 'relayed', default_return=None),
+                          'secure': helpers.get_xml_attr(player_info, 'secure', default_return=None)
                           }
 
         # Get the session details
@@ -1518,12 +1526,20 @@ class PmsConnect(object):
         else:
             session_details = {'session_id': '',
                                'bandwidth': '',
-                               'location': 'wan' if player_details['local'] == '0' else 'lan'
+                               'location': 'lan' if player_details['local'] else 'wan'
                                }
 
         # Check if using Plex Relay
-        session_details['relay'] = int(session_details['location'] != 'lan'
-                                       and player_details['ip_address_public'] == '127.0.0.1')
+        if player_details['relayed'] is None:
+            player_details['relayed'] = int(session_details['location'] != 'lan' and
+                                            player_details['ip_address_public'] == '127.0.0.1')
+
+        else:
+            player_details['relayed'] = helpers.cast_to_int(player_details['relayed'])
+
+        # Check if secure connection
+        if player_details['secure'] is not None:
+            player_details['secure'] = int(player_details['secure'] == '1')
 
         # Get the transcode details
         if session.getElementsByTagName('TranscodeSession'):
@@ -1587,7 +1603,7 @@ class PmsConnect(object):
         transcode_details['transcode_hw_encoding'] = int(transcode_details['transcode_hw_encode'].lower() in common.HW_ENCODERS)
 
         # Determine if a synced version is being played
-        sync_id = None
+        sync_id = synced_session_data = synced_item_details = None
         if media_type not in ('photo', 'clip') \
                 and not session.getElementsByTagName('Session') \
                 and not session.getElementsByTagName('TranscodeSession') \
@@ -1604,6 +1620,8 @@ class PmsConnect(object):
                 sync_id = synced_item_details['sync_id']
                 synced_xml = self.get_sync_item(sync_id=sync_id, output_format='xml')
                 synced_xml_head = synced_xml.getElementsByTagName('MediaContainer')
+
+                synced_xml_items = []
                 if synced_xml_head[0].getElementsByTagName('Track'):
                     synced_xml_items = synced_xml_head[0].getElementsByTagName('Track')
                 elif synced_xml_head[0].getElementsByTagName('Video'):
@@ -1614,7 +1632,7 @@ class PmsConnect(object):
                         break
 
         # Figure out which version is being played
-        if sync_id:
+        if sync_id and synced_session_data:
             media_info_all = synced_session_data.getElementsByTagName('Media')
         else:
             media_info_all = session.getElementsByTagName('Media')
@@ -1628,10 +1646,10 @@ class PmsConnect(object):
             if helpers.get_xml_attr(stream, 'streamType') == '1':
                 video_stream_info = stream
 
-            elif helpers.get_xml_attr(stream, 'streamType') == '2':
+            elif helpers.get_xml_attr(stream, 'streamType') == '2' and helpers.get_xml_attr(stream, 'selected') == '1':
                 audio_stream_info = stream
 
-            elif helpers.get_xml_attr(stream, 'streamType') == '3':
+            elif helpers.get_xml_attr(stream, 'streamType') == '3' and helpers.get_xml_attr(stream, 'selected') == '1':
                 subtitle_stream_info = stream
 
         video_id = audio_id = subtitle_id = None
@@ -1688,6 +1706,7 @@ class PmsConnect(object):
                                 'stream_subtitle_decision': helpers.get_xml_attr(subtitle_stream_info, 'decision')
                                 }
         else:
+            subtitle_selected = None
             subtitle_details = {'stream_subtitle_codec': '',
                                 'stream_subtitle_container': '',
                                 'stream_subtitle_format': '',
@@ -1924,6 +1943,7 @@ class PmsConnect(object):
                     quality_profile = 'Original'
 
             if stream_details['optimized_version']:
+                source_bitrate = helpers.cast_to_int(source_media_details.get('bitrate'))
                 optimized_version_profile = '{} Mbps {}'.format(round(source_bitrate / 1000.0, 1),
                     plexpy.common.VIDEO_RESOLUTION_OVERRIDES.get(source_media_details['video_resolution'],
                                                                  source_media_details['video_resolution']))
@@ -1998,25 +2018,42 @@ class PmsConnect(object):
 
         Output: bool
         """
+        plex_tv = plextv.PlexTV()
+        if not plex_tv.get_plexpass_status():
+            msg = 'No Plex Pass subscription'
+            logger.warn(u"Tautulli Pmsconnect :: Failed to terminate session: %s." % msg)
+            return msg
+
         message = message.encode('utf-8') or 'The server owner has ended the stream.'
 
-        if session_key and not session_id:
-            ap = activity_processor.ActivityProcessor()
-            session = ap.get_session_by_key(session_key=session_key)
-            session_id = session['session_id']
+        ap = activity_processor.ActivityProcessor()
 
-        elif session_id and not session_key:
-            ap = activity_processor.ActivityProcessor()
+        if session_key:
+            session = ap.get_session_by_key(session_key=session_key)
+            if session and not session_id:
+                session_id = session['session_id']
+
+        elif session_id:
             session = ap.get_session_by_id(session_id=session_id)
-            session_key = session['session_key']
+            if session and not session_key:
+                session_key = session['session_key']
+
+        else:
+            session = session_key = session_id = None
+
+        if not session:
+            msg = 'Invalid session_key (%s) or session_id (%s)' % (session_key, session_id)
+            logger.warn(u"Tautulli Pmsconnect :: Failed to terminate session: %s." % msg)
+            return msg
 
         if session_id:
             logger.info(u"Tautulli Pmsconnect :: Terminating session %s (session_id %s)." % (session_key, session_id))
-            result = self.get_sessions_terminate(session_id=session_id, reason=urllib.quote_plus(message))
-            return result
+            result = self.get_sessions_terminate(session_id=session_id, reason=message)
+            return True
         else:
-            logger.warn(u"Tautulli Pmsconnect :: Failed to terminate session %s. Missing session_id." % session_key)
-            return False
+            msg = 'Missing session_id'
+            logger.warn(u"Tautulli Pmsconnect :: Failed to terminate session: %s." % msg)
+            return msg
 
     def get_item_children(self, rating_key='', get_grandchildren=False):
         """

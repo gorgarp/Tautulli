@@ -65,6 +65,7 @@ _CONFIG_DEFINITIONS = {
     'PMS_UPDATE_CHANNEL': (str, 'PMS', 'plex'),
     'PMS_UPDATE_DISTRO': (str, 'PMS', ''),
     'PMS_UPDATE_DISTRO_BUILD': (str, 'PMS', ''),
+    'PMS_UPDATE_CHECK_INTERVAL': (int, 'Advanced', 24),
     'PMS_WEB_URL': (str, 'PMS', 'https://app.plex.tv/desktop'),
     'TIME_FORMAT': (str, 'General', 'HH:mm'),
     'ANON_REDIRECT': (str, 'General', 'http://www.nullrefer.com/?'),
@@ -283,7 +284,7 @@ _CONFIG_DEFINITIONS = {
     'JOIN_ON_PMSUPDATE': (int, 'Join', 0),
     'JOIN_ON_CONCURRENT': (int, 'Join', 0),
     'JOIN_ON_NEWDEVICE': (int, 'Join', 0),
-    'JOURNAL_MODE': (str, 'Advanced', 'wal'),
+    'JOURNAL_MODE': (str, 'Advanced', 'WAL'),
     'LAUNCH_BROWSER': (int, 'General', 1),
     'LOG_BLACKLIST': (int, 'General', 1),
     'LOG_DIR': (str, 'General', ''),
@@ -540,6 +541,7 @@ _CONFIG_DEFINITIONS = {
     'SCRIPTS_ON_PMSUPDATE_SCRIPT': (unicode, 'Scripts', ''),
     'SCRIPTS_ON_CONCURRENT_SCRIPT': (unicode, 'Scripts', ''),
     'SCRIPTS_ON_NEWDEVICE_SCRIPT': (unicode, 'Scripts', ''),
+    'SYNCHRONOUS_MODE': (str, 'Advanced', 'NORMAL'),
     'TELEGRAM_BOT_TOKEN': (str, 'Telegram', ''),
     'TELEGRAM_ENABLED': (int, 'Telegram', 0),
     'TELEGRAM_CHAT_ID': (str, 'Telegram', ''),
@@ -622,6 +624,7 @@ _CONFIG_DEFINITIONS = {
     'XBMC_ON_CONCURRENT': (int, 'XBMC', 0),
     'XBMC_ON_NEWDEVICE': (int, 'XBMC', 0),
     'JWT_SECRET': (str, 'Advanced', ''),
+    'JWT_UPDATE_SECRET': (bool_int, 'Advanced', 0),
     'SYSTEM_ANALYTICS': (int, 'Advanced', 1),
     'WIN_SYS_TRAY': (int, 'General', 1)
 }

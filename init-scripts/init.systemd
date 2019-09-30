@@ -24,9 +24,11 @@
 #    - The example settings in this file assume that Tautulli is installed to: /opt/Tautulli
 #
 #    - To create this user and give it ownership of the Tautulli directory:
-#       Ubuntu/Debian: sudo addgroup tautulli && sudo adduser --system --no-create-home tautulli --ingroup tautulli
-#       CentOS/Fedora: sudo adduser --system --no-create-home tautulli
-#       sudo chown tautulli:tautulli -R /opt/Tautulli
+#       1. Create the user:
+#           Ubuntu/Debian: sudo addgroup tautulli && sudo adduser --system --no-create-home tautulli --ingroup tautulli
+#           CentOS/Fedora: sudo adduser --system --no-create-home tautulli
+#       2. Give the user ownership of the Tautulli directory:
+#           sudo chown tautulli:tautulli -R /opt/Tautulli
 #
 #    - Adjust ExecStart= to point to:
 #       1. Your Tautulli executable
@@ -53,6 +55,10 @@ GuessMainPID=no
 Type=forking
 User=tautulli
 Group=tautulli
+Restart=on-abnormal
+RestartSec=5
+StartLimitInterval=90
+StartLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,115 @@
 # Changelog
 
+## v2.1.34 (2019-09-03)
+
+* History:
+  * New: Added Product column to history tables.
+* Notifications:
+  * Fix: IMDB/TMDb/TVDB/TVmaze ID notification parameters showing blank values after lookup.
+* UI:
+  * Fix: Libraries and Users tables did not respect the group history setting.
+* API:
+  * Fix: Title field was not searchable in get_library_media_info command.
+  * New: Added grouping option to get_libraries_table and get_users_table commands.
+  * New: Added product value to get_history command.
+* Other:
+  * Fix: Could not verify Plex Media Server with unpublished hostnames.
+  * Change: Automatically logout all Tautulli instances when changing the admin password.
+
+
+## v2.1.33 (2019-07-27)
+
+* Notifications:
+  * Change: Mask notification agent password fields.
+  * Change: Enable searching by email address in dropdown menu.
+* Other:
+  * Fix: Version number being overwritten with "None" which prevented updating in some instances.
+  * Change: Update Plex OAuth request headers.
+
+
+## v2.1.32 (2019-06-26)
+
+* Newsletters:
+  * Fix: Newsletter scheduler issue for QNAP devices using an invalid "local" timezone preventing Tautulli from starting.
+
+
+## v2.1.31 (2019-06-24)
+
+* No additional changes from v2.1.31-beta.
+
+
+## v2.1.31-beta (2019-06-13)
+
+* Monitoring:
+  * Fix: Synced content showing incorrect stream info.
+* Other:
+  * Fix: Unable to view database status when authentication is enabled.
+  * Change: Default database synchronous mode changed to prevent database corruption. Database response may be slower.
+
+
+## v2.1.30-beta (2019-05-11)
+
+* Monitoring:
+  * Fix: Activity crashing with Plex's Artist TV feature.
+  * New: Added setting for Plex Media Server Update Check Interval. (Thanks @abiacco)
+* Notifications:
+  * New: Added secure and relayed connection notification parameters.
+  * New: Added PLEX_USER_TOKEN to script environment variables.
+  * Change: Schedule notifications using UTC to prevent missing notifications due to misconfigured timezones.
+* API:
+  * New: Added status API command to check the status of Tautulli.
+
+
+## v2.1.29 (2019-05-11)
+
+* No additional changes from v2.1.29-beta.
+
+
+## v2.1.29-beta (2019-04-14)
+
+* Monitoring:
+  * Change: "Required Bandwidth" changed to "Reserved Bandwidth" in order to match the Plex dashboard.
+* Notifications:
+  * New: Added prefix and suffix notification text modifiers. See the "Notification Text Modifiers" help modal for details.
+* UI:
+  * New: Added "Undelete" button to the edit library and edit user modals.
+  * Fix: User IP address history table showing incorrect "Last Seen" values.
+* API:
+  * Fix: Search API only returning 3 results.
+  * Fix: Terminate stream API failing when both session_key and session_id were provided.
+  * Change: Improved API response HTTP status codes and error messages.
+
+
+## v2.1.28 (2019-03-10)
+
+* Monitoring:
+  * New: Added secure/insecure connection icon on the activity cards. Requires Plex Media Server v1.15+.
+* Other:
+  * Change: Improved mass deleting of all images from Cloudinary. Requires all previous images on Cloudinary to be manually tagged with "tautulli". New uploads are automatically tagged.
+
+
+## v2.1.27-beta (2019-03-03)
+
+* Monitoring:
+  * Fix: Error when playing synced optimized versions.
+  * Change: Show message to complete the setup wizard instead of error communicating with server message.
+  * Change: URL changed on Plex.tv for Plex Media Server beta updates.
+* Notifications:
+  * New: Show the media type exclusion tags in the text preview modal.
+  * Fix: Unicode error in the Email notification failed response message.
+  * Fix: Error when a notification agent response is missing the "Content-Type" header.
+* UI:
+  * Fix: Usernames were not being sanitized in dropdown selectors.
+  * Change: Different display of "All" recently added items on the homepage due to change in the Plex Media Server v1.15+ API.
+* API:
+  * New: Added current Tautulli version to update_check API response.
+  * Change: API no longer returns sanitized HTML response data.
+* Other:
+  * New: Added auto-restart to systemd init script.
+  * Fix: Patreon donation URL.
+  * Remove: Crypto donation options.
+
+
 ## v2.1.26 (2018-12-01)
 
 * Monitoring:
@@ -96,7 +206,8 @@
 
 
 ## v2.1.20 (2018-09-05)
-* No changes.
+
+* No additional changes from v2.1.20-beta.
 
 
 ## v2.1.20-beta (2018-09-02)

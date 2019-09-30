@@ -252,6 +252,14 @@ def human_duration(s, sig='dhms'):
     return hd
 
 
+def format_timedelta_Hms(td):
+    s = td.total_seconds()
+    hours = s // 3600
+    minutes = (s % 3600) // 60
+    seconds = s % 60
+    return '{:02d}:{:02d}:{:02d}'.format(int(hours), int(minutes), int(seconds))
+
+
 def get_age(date):
 
     try:
@@ -522,11 +530,28 @@ def process_json_kwargs(json_kwargs):
     return params
 
 
-def sanitize(string):
-    if string:
-        return unicode(string).replace('<','&lt;').replace('>','&gt;')
+def sanitize_out(*dargs, **dkwargs):
+    """ Helper decorator that sanitized the output
+    """
+    def rd(function):
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            return sanitize(function(*args, **kwargs))
+        return wrapper
+    return rd
+
+
+def sanitize(obj):
+    if isinstance(obj, basestring):
+        return unicode(obj).replace('<', '&lt;').replace('>', '&gt;')
+    elif isinstance(obj, list):
+        return [sanitize(o) for o in obj]
+    elif isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.iteritems()}
+    elif isinstance(obj, tuple):
+        return tuple(sanitize(list(obj)))
     else:
-        return ''
+        return obj
 
 
 def is_public_ip(host):
@@ -801,7 +826,7 @@ def upload_to_cloudinary(img_data, img_title='', rating_key='', fallback=''):
     try:
         response = upload('data:image/png;base64,{}'.format(base64.b64encode(img_data)),
                           public_id='{}_{}'.format(fallback, rating_key),
-                          tags=[fallback, str(rating_key)],
+                          tags=['tautulli', fallback, str(rating_key)],
                           context={'title': img_title.encode('utf-8'), 'rating_key': str(rating_key), 'fallback': fallback})
         logger.debug(u"Tautulli Helpers :: Image '{}' ({}) uploaded to Cloudinary.".format(img_title, fallback))
         img_url = response.get('url', '')
@@ -811,7 +836,7 @@ def upload_to_cloudinary(img_data, img_title='', rating_key='', fallback=''):
     return img_url
 
 
-def delete_from_cloudinary(rating_key):
+def delete_from_cloudinary(rating_key=None, delete_all=False):
     """ Deletes an image from Cloudinary """
     if not plexpy.CONFIG.CLOUDINARY_CLOUD_NAME or not plexpy.CONFIG.CLOUDINARY_API_KEY or not plexpy.CONFIG.CLOUDINARY_API_SECRET:
         logger.error(u"Tautulli Helpers :: Cannot delete image from Cloudinary. Cloudinary settings not specified in the settings.")
@@ -823,9 +848,15 @@ def delete_from_cloudinary(rating_key):
         api_secret=plexpy.CONFIG.CLOUDINARY_API_SECRET
     )
 
-    delete_resources_by_tag(str(rating_key))
+    if delete_all:
+        delete_resources_by_tag('tautulli')
+        logger.debug(u"Tautulli Helpers :: Deleted all images from Cloudinary.")
+    elif rating_key:
+        delete_resources_by_tag(str(rating_key))
+        logger.debug(u"Tautulli Helpers :: Deleted images from Cloudinary with rating_key {}.".format(rating_key))
+    else:
+        logger.debug(u"Tautulli Helpers :: Unable to delete images from Cloudinary: No rating_key provided.")
 
-    logger.debug(u"Tautulli Helpers :: Deleted images from Cloudinary with rating_key {}.".format(rating_key))
     return True
 
 
@@ -1094,13 +1125,13 @@ def get_plexpy_url(hostname=None):
     else:
         hostname = hostname or plexpy.CONFIG.HTTP_HOST
 
-    if plexpy.CONFIG.HTTP_PORT not in (80, 443):
-        port = ':' + str(plexpy.CONFIG.HTTP_PORT)
+    if plexpy.HTTP_PORT not in (80, 443):
+        port = ':' + str(plexpy.HTTP_PORT)
     else:
         port = ''
 
-    if plexpy.CONFIG.HTTP_ROOT.strip('/'):
-        root = '/' + plexpy.CONFIG.HTTP_ROOT.strip('/')
+    if plexpy.HTTP_ROOT.strip('/'):
+        root = '/' + plexpy.HTTP_ROOT.strip('/')
     else:
         root = ''
 
@@ -1147,3 +1178,18 @@ def split_args(args=None):
         return [arg.decode(plexpy.SYS_ENCODING, 'ignore')
                 for arg in shlex.split(args.encode(plexpy.SYS_ENCODING, 'ignore'))]
     return []
+
+def mask_config_passwords(config):
+    if isinstance(config, list):
+        for cfg in config:
+            if 'password' in cfg.get('name', '') and cfg.get('value', '') != '':
+                cfg['value'] = '    '
+
+    elif isinstance(config, dict):
+        for cfg, val in config.iteritems():
+            # Check for a password config keys and if the password is not blank
+            if 'password' in cfg and val != '':
+                # Set the password to blank so it is not exposed in the HTML form
+                config[cfg] = '    '
+
+    return config

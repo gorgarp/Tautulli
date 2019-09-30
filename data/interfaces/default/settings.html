@@ -814,6 +814,18 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <label for="pms_update_check_interval">Update Check Interval</label>
+                                <div class="row">
+                                    <div class="col-md-2">
+                                        <input type="text" class="form-control" data-parsley-type="integer" id="pms_update_check_interval" name="pms_update_check_interval" value="${config['pms_update_check_interval']}" size="3" data-parsley-min="1" data-parsley-trigger="change" data-parsley-errors-container="#pms_update_check_interval_error" required>
+                                    </div>
+                                    <div id="pms_update_check_interval_error" class="alert alert-danger settings-alert" role="alert"></div>
+                                </div>
+                                <p class="help-block">
+                                    The interval (in hours) Tautulli will check for a new Plex Media Server update. Minimum 1, default 24.
+                                </p>
+                            </div>
                         </div>
                         <div class="checkbox">
                             <label>
@@ -1532,7 +1544,7 @@
                     <div style="padding-bottom: 10px;">
                         <p class="help-block">
                             All text inside <span class="inline-pre">&lt;show&gt;&lt;/show&gt;</span>/<span class="inline-pre">&lt;season&gt;&lt;/season&gt;</span>/<span class="inline-pre">&lt;episode&gt;&lt;/episode&gt;</span>
-                            tags will only be sent when the media type is show/season/episode.
+                            tags will only be sent when the media type is show, season, or episode, respectively.
                         </p>
                         <p><strong style="color: #fff;">Example:</strong></p>
                         <pre>{show_name}&lt;season&gt; - Season {season_num}&lt;/season&gt;&lt;episode&gt; - S{season_num}E{episode_num} - {episode_name}&lt;/episode&gt; was recently added to Plex.</pre>
@@ -1543,7 +1555,7 @@
                     <div>
                         <p class="help-block">
                             All text inside <span class="inline-pre">&lt;artist&gt;&lt;/artist&gt;</span>/<span class="inline-pre">&lt;album&gt;&lt;/album&gt;</span>/<span class="inline-pre">&lt;track&gt;&lt;/track&gt;</span>
-                            tags will only be sent when the media type is artist/album/track.
+                            tags will only be sent when the media type is artist, album, or track, respectively.
                         </p>
                         <p><strong style="color: #fff;">Example:</strong></p>
                         <pre>{artist_name}&lt;album&gt; - {album_name}&lt;/album&gt;&lt;track&gt; - {album_name} - {track_name}&lt;/track&gt; was recently added to Plex.</pre>
@@ -1588,7 +1600,7 @@
                     <div>
                         <h4>List Slicing</h4>
                     </div>
-                    <div>
+                    <div style="padding-bottom: 10px;">
                         <p class="help-block">
                             Notification parameters which have a list of items can be sliced with a slice formatter <span class="inline-pre">:[X:Y]</span> to limit the number of items.
                             Note: the first item in the list is numbered <span class="inline-pre">0</span>.
@@ -1598,6 +1610,41 @@
 {actors:[:4]}  --> Only the first 4 actors (Actors: 0, 1, 2, 3)
 {actors:[2:]}  --> Only the 3rd to last actors (Actors: 2, 3, 4, ...)
 {actors:[1:5]} --> Only the 2nd to 5th actors (Actors: 1, 2, 3, 4)</pre>
+                    </div>
+                    <div>
+                        <h4>Prefix and Suffix</h4>
+                    </div>
+                    <div style="padding-bottom: 10px;">
+                        <p class="help-block">
+                            A prefix or a suffix can be added to the notification parameters using <span class="inline-pre">Prefix&lt;</span> and <span class="inline-pre">&gt;Suffix</span>.
+                            If the notification parameter is unavailable, the prefix or suffix will not be displayed.
+                        </p>
+                        <p><strong style="color: #fff;">Example:</strong></p>
+                        <pre>{rating}              --> 8.9
+{Rating: &lt;rating}     --> Rating: 8.9
+{rating&gt;/10}          --> 8.9/10
+{Rating: &lt;rating&gt;/10} --> Rating: 8.9/10</pre>
+                        <p><strong style="color: #fff;">Example with unavailable parameter:</strong></p>
+                        <pre>{rating}              -->
+Rating: {rating}/10   --> Rating: /10
+{Rating: &lt;rating&gt;/10} --> </pre>
+                    </div>
+                    <div>
+                        <h4>Combined</h4>
+                    </div>
+                    <div>
+                        <p class="help-block">
+                            If combining multiple notification text modifiers, the order of the modifiers must be:
+                        </p>
+                        <ol class="help-block">
+                            <li>Prefix</li>
+                            <li>Parameter</li>
+                            <li>Case Modifier</li>
+                            <li>List Slicing</li>
+                            <li>Suffix</li>
+                        </ol>
+                        <p><strong style="color: #fff;">Example:</strong></p>
+                        <pre>{Starring &lt;actors!c:[0]&gt; as the main character.} --> Starring Arnold Schwarzenegger as the main character.</pre>
                     </div>
                 </div>
             </div>
@@ -1620,7 +1667,7 @@
             <div class="modal-body">
                 <div>
                     <p class="help-block">
-                        If the value for a selected parameter cannot be provided, it will display as blank.
+                        If the value for a selected parameter is unavailable, it will display as blank.
                     </p>
                     % for category in common.NEWSLETTER_PARAMETERS:
                     <table class="notification-params">
@@ -2301,6 +2348,7 @@ $(document).ready(function() {
         $("#token_verify").html('<i class="fa fa-refresh fa-spin"></i>').fadeIn('fast');
     }
     function OAuthSuccessCallback(authToken) {
+        var x_plex_headers = getPlexHeaders();
         $("#pms_token").val(authToken);
         $("#pms_uuid").val(x_plex_headers['X-Plex-Client-Identifier']);
         $("#token_verify").html('<i class="fa fa-check"></i>').fadeIn('fast');
@@ -2530,8 +2578,10 @@ $(document).ready(function() {
                     .prop('selected', selected));
             }
 
+            var download_url = 'https://plex.tv/api/downloads/' + (plex_update_channel === 'plexpass' ? '5' : '1') + '.json?channel=' + plex_update_channel;
+
             $.ajax({
-                url: 'https://plex.tv/api/downloads/1.json?channel=' + plex_update_channel,
+                url: download_url,
                 type: 'GET',
                 dataType: 'json',
                 beforeSend: function (xhr) {

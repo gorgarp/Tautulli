@@ -700,8 +700,9 @@ Returns:
               "parent_title": "",
               "paused_counter": 0,
               "percent_complete": 84,
-              "platform": "Chrome",
-              "player": "Plex Web (Chrome)",
+              "platform": "Windows",
+              "product": "Plex for Windows",
+              "player": "Castle-PC",
               "rating_key": 4348,
               "reference_id": 1123,
               "session_key": null,
@@ -833,6 +834,7 @@ Required parameters:
     None
 
 Optional parameters:
+    grouping (int):                 0 or 1
     order_column (str):             "library_thumb", "section_name", "section_type", "count", "parent_count",
                                     "child_count", "last_accessed", "last_played", "plays", "duration"
     order_dir (str):                "desc" or "asc"
@@ -893,6 +895,7 @@ Returns:
     json:
         {"child_count": null,
          "count": 887,
+         "deleted_section": 0,
          "do_notify": 1,
          "do_notify_created": 1,
          "keep_history": 1,
@@ -2340,6 +2343,7 @@ Required parameters:
     None
 
 Optional parameters:
+    grouping (int):                 0 or 1
     order_column (str):             "user_thumb", "friendly_name", "last_seen", "ip_address", "platform",
                                     "player", "last_played", "plays", "duration"
     order_dir (str):                "desc" or "asc"
@@ -2641,6 +2645,24 @@ Optional parameters:
 
 Returns:
     None
+```
+
+
+### status
+Get the current status of Tautulli.
+
+```
+Required parameters:
+    None
+
+Optional parameters:
+    check (str):        database
+
+Returns:
+    json:
+        {"result": "success",
+         "message": "Ok",
+         }
 ```
 
 

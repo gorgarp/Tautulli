@@ -70,7 +70,7 @@ class Users(object):
     def __init__(self):
         pass
 
-    def get_datatables_list(self, kwargs=None):
+    def get_datatables_list(self, kwargs=None, grouping=None):
         default_return = {'recordsFiltered': 0,
                           'recordsTotal': 0,
                           'draw': 0,
@@ -81,18 +81,23 @@ class Users(object):
 
         custom_where = [['users.deleted_user', 0]]
 
+        if grouping is None:
+            grouping = plexpy.CONFIG.GROUP_HISTORY_TABLES
+
         if session.get_session_user_id():
             custom_where.append(['users.user_id', session.get_session_user_id()])
 
         if kwargs.get('user_id'):
             custom_where.append(['users.user_id', kwargs.get('user_id')])
 
+        group_by = 'session_history.reference_id' if grouping else 'session_history.id'
+
         columns = ['users.user_id',
                    '(CASE WHEN users.friendly_name IS NULL OR TRIM(users.friendly_name) = "" \
                     THEN users.username ELSE users.friendly_name END) AS friendly_name',
                    'users.thumb AS user_thumb',
                    'users.custom_avatar_url AS custom_thumb',
-                   'COUNT(session_history.id) AS plays',
+                   'COUNT(DISTINCT %s) AS plays' % group_by,
                    'SUM(CASE WHEN session_history.stopped > 0 THEN (session_history.stopped - session_history.started) \
                     ELSE 0 END) - SUM(CASE WHEN session_history.paused_counter IS NULL THEN 0 ELSE \
                     session_history.paused_counter END) AS duration',
@@ -205,7 +210,7 @@ class Users(object):
         custom_where = ['users.user_id', user_id]
 
         columns = ['session_history.id',
-                   'session_history.started AS last_seen',
+                   'MAX(session_history.started) AS last_seen',
                    'session_history.ip_address',
                    'COUNT(session_history.id) AS play_count',
                    'session_history.platform',
@@ -668,21 +673,29 @@ class Users(object):
 
         try:
             if user_id and str(user_id).isdigit():
-                logger.info(u"Tautulli Users :: Re-adding user with id %s to database." % user_id)
-                monitor_db.action('UPDATE users SET deleted_user = 0 WHERE user_id = ?', [user_id])
-                monitor_db.action('UPDATE users SET keep_history = 1 WHERE user_id = ?', [user_id])
-                monitor_db.action('UPDATE users SET do_notify = 1 WHERE user_id = ?', [user_id])
+                query = 'SELECT * FROM users WHERE user_id = ?'
+                result = monitor_db.select(query=query, args=[user_id])
+                if result:
+                    logger.info(u"Tautulli Users :: Re-adding user with id %s to database." % user_id)
+                    monitor_db.action('UPDATE users SET deleted_user = 0 WHERE user_id = ?', [user_id])
+                    monitor_db.action('UPDATE users SET keep_history = 1 WHERE user_id = ?', [user_id])
+                    monitor_db.action('UPDATE users SET do_notify = 1 WHERE user_id = ?', [user_id])
+                    return True
+                else:
+                    return False
 
-                return 'Re-added user with id %s.' % user_id
             elif username:
-                logger.info(u"Tautulli Users :: Re-adding user with username %s to database." % username)
-                monitor_db.action('UPDATE users SET deleted_user = 0 WHERE username = ?', [username])
-                monitor_db.action('UPDATE users SET keep_history = 1 WHERE username = ?', [username])
-                monitor_db.action('UPDATE users SET do_notify = 1 WHERE username = ?', [username])
+                query = 'SELECT * FROM users WHERE username = ?'
+                result = monitor_db.select(query=query, args=[username])
+                if result:
+                    logger.info(u"Tautulli Users :: Re-adding user with username %s to database." % username)
+                    monitor_db.action('UPDATE users SET deleted_user = 0 WHERE username = ?', [username])
+                    monitor_db.action('UPDATE users SET keep_history = 1 WHERE username = ?', [username])
+                    monitor_db.action('UPDATE users SET do_notify = 1 WHERE username = ?', [username])
+                    return True
+                else:
+                    return False
 
-                return 'Re-added user with username %s.' % username
-            else:
-                return 'Unable to re-add user, user_id or username not valid.'
         except Exception as e:
             logger.warn(u"Tautulli Users :: Unable to execute database query for undelete: %s." % e)
 

@@ -76,6 +76,7 @@ class DataFactory(object):
             '(CASE WHEN users.friendly_name IS NULL OR TRIM(users.friendly_name) = "" \
              THEN users.username ELSE users.friendly_name END) AS friendly_name',
             'platform',
+            'product',
             'player',
             'ip_address',
             'session_history.media_type',
@@ -123,6 +124,7 @@ class DataFactory(object):
                 '(CASE WHEN friendly_name IS NULL OR TRIM(friendly_name) = "" \
                  THEN user ELSE friendly_name END) AS friendly_name',
                 'platform',
+                'product',
                 'player',
                 'ip_address',
                 'media_type',
@@ -225,6 +227,7 @@ class DataFactory(object):
                    'user': item['user'],
                    'friendly_name': item['friendly_name'],
                    'platform': platform,
+                   'product': item['product'],
                    'player': item['player'],
                    'ip_address': item['ip_address'],
                    'media_type': item['media_type'],
@@ -1259,8 +1262,11 @@ class DataFactory(object):
                     'GROUP BY rating_key' % where
             results = monitor_db.select(query, args=args)
 
-            for cloudinary_info in results:
-                helpers.delete_from_cloudinary(rating_key=cloudinary_info['rating_key'])
+            if delete_all:
+                helpers.delete_from_cloudinary(delete_all=delete_all)
+            else:
+                for cloudinary_info in results:
+                    helpers.delete_from_cloudinary(rating_key=cloudinary_info['rating_key'])
 
             logger.info(u"Tautulli DataFactory :: Deleting Cloudinary info%s from the database."
                         % log_msg)

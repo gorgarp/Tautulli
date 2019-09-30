@@ -13,7 +13,6 @@
 #  You should have received a copy of the GNU General Public License
 #  along with Tautulli.  If not, see <http://www.gnu.org/licenses/>.
 
-import hashlib
 import json
 import os
 import shutil
@@ -55,9 +54,9 @@ import users
 import versioncheck
 import web_socket
 from plexpy.api2 import API2
-from plexpy.helpers import checked, addtoapi, get_ip, create_https_certificates, build_datatables_json
+from plexpy.helpers import checked, addtoapi, get_ip, create_https_certificates, build_datatables_json, sanitize_out
 from plexpy.session import get_session_info, get_session_user_id, allow_session_user, allow_session_library
-from plexpy.webauth import AuthController, requireAuth, member_of
+from plexpy.webauth import AuthController, requireAuth, member_of, check_auth
 
 
 def serve_template(templatename, **kwargs):
@@ -176,7 +175,8 @@ class WebInterface(object):
             "home_refresh_interval": plexpy.CONFIG.HOME_REFRESH_INTERVAL,
             "pms_name": plexpy.CONFIG.PMS_NAME,
             "pms_is_cloud": plexpy.CONFIG.PMS_IS_CLOUD,
-            "update_show_changelog": plexpy.CONFIG.UPDATE_SHOW_CHANGELOG
+            "update_show_changelog": plexpy.CONFIG.UPDATE_SHOW_CHANGELOG,
+            "first_run_complete": plexpy.CONFIG.FIRST_RUN_COMPLETE
         }
         return serve_template(templatename="index.html", title="Home", config=config)
 
@@ -245,7 +245,7 @@ class WebInterface(object):
     @cherrypy.tools.json_out()
     @requireAuth(member_of("admin"))
     @addtoapi()
-    def terminate_session(self, session_key=None, session_id=None, message=None, **kwargs):
+    def terminate_session(self, session_key='', session_id='', message='', **kwargs):
         """ Stop a streaming session.
 
             ```
@@ -263,8 +263,10 @@ class WebInterface(object):
         pms_connect = pmsconnect.PmsConnect()
         result = pms_connect.terminate_session(session_key=session_key, session_id=session_id, message=message)
 
-        if result:
+        if result is True:
             return {'result': 'success', 'message': 'Session terminated.'}
+        elif result:
+            return {'result': 'error', 'message': 'Failed to terminate session: {}.'.format(result)}
         else:
             return {'result': 'error', 'message': 'Failed to terminate session.'}
 
@@ -349,8 +351,9 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi("get_libraries_table")
-    def get_library_list(self, **kwargs):
+    def get_library_list(self, grouping=None, **kwargs):
         """ Get the data on the Tautulli libraries table.
 
             ```
@@ -358,6 +361,7 @@ class WebInterface(object):
                 None
 
             Optional parameters:
+                grouping (int):                 0 or 1
                 order_column (str):             "library_thumb", "section_name", "section_type", "count", "parent_count",
                                                 "child_count", "last_accessed", "last_played", "plays", "duration"
                 order_dir (str):                "desc" or "asc"
@@ -420,13 +424,14 @@ class WebInterface(object):
             kwargs['json_data'] = build_datatables_json(kwargs, dt_columns, "section_name")
 
         library_data = libraries.Libraries()
-        library_list = library_data.get_datatables_list(kwargs=kwargs)
+        library_list = library_data.get_datatables_list(kwargs=kwargs, grouping=grouping)
 
         return library_list
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth(member_of("admin"))
+    @sanitize_out()
     @addtoapi("get_library_names")
     def get_library_sections(self, **kwargs):
         """ Get a list of library sections and ids on the PMS.
@@ -756,6 +761,7 @@ class WebInterface(object):
                 json:
                     {"child_count": null,
                      "count": 887,
+                     "deleted_section": 0,
                      "do_notify": 1,
                      "do_notify_created": 1,
                      "keep_history": 1,
@@ -944,19 +950,14 @@ class WebInterface(object):
             ```
         """
         library_data = libraries.Libraries()
-
-        if section_id:
-            delete_row = library_data.undelete(section_id=section_id)
-
-            if delete_row:
-                return {'message': delete_row}
-        elif section_name:
-            delete_row = library_data.undelete(section_name=section_name)
-
-            if delete_row:
-                return {'message': delete_row}
-        else:
-            return {'message': 'no data received'}
+        result = library_data.undelete(section_id=section_id, section_name=section_name)
+        if result:
+            if section_id:
+                msg ='section_id %s' % section_id
+            elif section_name:
+                msg = 'section_name %s' % section_name
+            return {'result': 'success', 'message': 'Re-added library with %s.' % msg}
+        return {'result': 'error', 'message': 'Unable to re-add library. Invalid section_id or section_name.'}
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
@@ -1014,8 +1015,9 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi("get_users_table")
-    def get_user_list(self, **kwargs):
+    def get_user_list(self, grouping=None, **kwargs):
         """ Get the data on Tautulli users table.
 
             ```
@@ -1023,6 +1025,7 @@ class WebInterface(object):
                 None
 
             Optional parameters:
+                grouping (int):                 0 or 1
                 order_column (str):             "user_thumb", "friendly_name", "last_seen", "ip_address", "platform",
                                                 "player", "last_played", "plays", "duration"
                 order_dir (str):                "desc" or "asc"
@@ -1081,7 +1084,7 @@ class WebInterface(object):
             kwargs['json_data'] = build_datatables_json(kwargs, dt_columns, "friendly_name")
 
         user_data = users.Users()
-        user_list = user_data.get_datatables_list(kwargs=kwargs)
+        user_list = user_data.get_datatables_list(kwargs=kwargs, grouping=grouping)
 
         return user_list
 
@@ -1228,6 +1231,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi()
     def get_user_ips(self, user_id=None, **kwargs):
         """ Get the data on Tautulli users IP table.
@@ -1294,6 +1298,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi()
     def get_user_logins(self, user_id=None, **kwargs):
         """ Get the data on Tautulli user login table.
@@ -1551,18 +1556,15 @@ class WebInterface(object):
                 None
             ```
         """
-        if user_id:
-            user_data = users.Users()
-            delete_row = user_data.undelete(user_id=user_id)
-            if delete_row:
-                return {'message': delete_row}
-        elif username:
-            user_data = users.Users()
-            delete_row = user_data.undelete(username=username)
-            if delete_row:
-                return {'message': delete_row}
-        else:
-            return {'message': 'no data received'}
+        user_data = users.Users()
+        result = user_data.undelete(user_id=user_id, username=username)
+        if result:
+            if user_id:
+                msg ='user_id %s' % user_id
+            elif username:
+                msg = 'username %s' % username
+            return {'result': 'success', 'message': 'Re-added user with %s.' % msg}
+        return {'result': 'error', 'message': 'Unable to re-add user. Invalid user_id or username.'}
 
 
     ##### History #####
@@ -1575,6 +1577,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi()
     def get_history(self, user=None, user_id=None, grouping=None, **kwargs):
         """ Get the Tautulli history.
@@ -1627,8 +1630,9 @@ class WebInterface(object):
                           "parent_title": "",
                           "paused_counter": 0,
                           "percent_complete": 84,
-                          "platform": "Chrome",
-                          "player": "Plex Web (Chrome)",
+                          "platform": "Windows",
+                          "product": "Plex for Windows",
+                          "player": "Castle-PC",
                           "rating_key": 4348,
                           "reference_id": 1123,
                           "session_key": null,
@@ -1657,6 +1661,7 @@ class WebInterface(object):
                           ("friendly_name", True, True),
                           ("ip_address", True, True),
                           ("platform", True, True),
+                          ("product", True, True),
                           ("player", True, True),
                           ("full_title", True, True),
                           ("started", True, False),
@@ -1821,6 +1826,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth()
+    @sanitize_out()
     @addtoapi()
     def get_user_names(self, **kwargs):
         """ Get a list of all user and user ids.
@@ -2293,6 +2299,7 @@ class WebInterface(object):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
+    @sanitize_out()
     @requireAuth()
     def get_sync(self, machine_id=None, user_id=None, **kwargs):
         if user_id == 'null':
@@ -2434,6 +2441,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth(member_of("admin"))
+    @sanitize_out()
     @addtoapi()
     def get_notification_log(self, **kwargs):
         """ Get the data on the Tautulli notification logs table.
@@ -2495,6 +2503,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth(member_of("admin"))
+    @sanitize_out()
     @addtoapi()
     def get_newsletter_log(self, **kwargs):
         """ Get the data on the Tautulli newsletter logs table.
@@ -2755,6 +2764,7 @@ class WebInterface(object):
             "pms_uuid": plexpy.CONFIG.PMS_UUID,
             "pms_web_url": plexpy.CONFIG.PMS_WEB_URL,
             "pms_name": plexpy.CONFIG.PMS_NAME,
+            "pms_update_check_interval": plexpy.CONFIG.PMS_UPDATE_CHECK_INTERVAL,
             "date_format": plexpy.CONFIG.DATE_FORMAT,
             "time_format": plexpy.CONFIG.TIME_FORMAT,
             "week_start_monday": checked(plexpy.CONFIG.WEEK_START_MONDAY),
@@ -2847,9 +2857,15 @@ class WebInterface(object):
                 else:
                     kwargs['http_password'] = plexpy.CONFIG.HTTP_PASSWORD
 
+                # Flag to refresh JWT uuid to log out clients
+                kwargs['jwt_update_secret'] = True
+
             elif kwargs['http_password'] and kwargs.get('http_hash_password'):
                 kwargs['http_password'] = make_hash(kwargs['http_password'])
                 kwargs['http_hashed_password'] = 1
+
+                # Flag to refresh JWT uuid to log out clients
+                kwargs['jwt_update_secret'] = True
 
             elif not kwargs.get('http_hash_password'):
                 kwargs['http_hashed_password'] = 0
@@ -2877,6 +2893,7 @@ class WebInterface(object):
         if kwargs.get('check_github') != plexpy.CONFIG.CHECK_GITHUB or \
             kwargs.get('refresh_libraries_interval') != str(plexpy.CONFIG.REFRESH_LIBRARIES_INTERVAL) or \
             kwargs.get('refresh_users_interval') != str(plexpy.CONFIG.REFRESH_USERS_INTERVAL) or \
+            kwargs.get('pms_update_check_interval') != str(plexpy.CONFIG.PMS_UPDATE_CHECK_INTERVAL) or \
             kwargs.get('monitor_pms_updates') != plexpy.CONFIG.MONITOR_PMS_UPDATES or \
             kwargs.get('monitor_remote_access') != plexpy.CONFIG.MONITOR_REMOTE_ACCESS or \
             kwargs.get('pms_url_manual') != plexpy.CONFIG.PMS_URL_MANUAL:
@@ -3161,13 +3178,13 @@ class WebInterface(object):
                      }
             ```
         """
-        result = notifiers.get_notifier_config(notifier_id=notifier_id)
+        result = notifiers.get_notifier_config(notifier_id=notifier_id, mask_passwords=True)
         return result
 
     @cherrypy.expose
     @requireAuth(member_of("admin"))
     def get_notifier_config_modal(self, notifier_id=None, **kwargs):
-        result = notifiers.get_notifier_config(notifier_id=notifier_id)
+        result = notifiers.get_notifier_config(notifier_id=notifier_id, mask_passwords=True)
 
         parameters = [
                 {'name': param['name'], 'type': param['type'], 'value': param['value']}
@@ -3650,10 +3667,10 @@ class WebInterface(object):
                     identifier = server['clientIdentifier']
                     break
 
-            # Fallback to checking /identity endpoint is server is unpublished
+            # Fallback to checking /identity endpoint if the server is unpublished
             # Cannot set SSL settings on the PMS if unpublished so 'http' is okay
             if not identifier:
-                scheme = 'https' if ssl else 'http'
+                scheme = 'https' if helpers.cast_to_int(ssl) else 'http'
                 url = '{scheme}://{hostname}:{port}'.format(scheme=scheme, hostname=hostname, port=port)
                 uri = '/identity'
 
@@ -3773,6 +3790,7 @@ class WebInterface(object):
                     'update': True,
                     'release': True,
                     'message': 'A new release (%s) of Tautulli is available.' % plexpy.LATEST_RELEASE,
+                    'current_release': plexpy.common.RELEASE,
                     'latest_release': plexpy.LATEST_RELEASE,
                     'release_url': helpers.anon_url(
                         'https://github.com/%s/%s/releases/tag/%s'
@@ -3786,6 +3804,7 @@ class WebInterface(object):
                     'update': True,
                     'release': False,
                     'message': 'A newer version of Tautulli is available.',
+                    'current_version': plexpy.CURRENT_VERSION,
                     'latest_version': plexpy.LATEST_VERSION,
                     'commits_behind': plexpy.COMMITS_BEHIND,
                     'compare_url': helpers.anon_url(
@@ -4341,7 +4360,7 @@ class WebInterface(object):
             ```
         """
         pms_connect = pmsconnect.PmsConnect()
-        result = pms_connect.get_search_results(query)
+        result = pms_connect.get_search_results(query=query, limit=limit)
 
         if result:
             return result
@@ -5228,6 +5247,7 @@ class WebInterface(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @requireAuth(member_of("admin"))
+    @sanitize_out()
     @addtoapi()
     def get_synced_items(self, machine_id='', user_id='', **kwargs):
         """ Get a list of synced items on the PMS.
@@ -5657,13 +5677,13 @@ class WebInterface(object):
                      }
             ```
         """
-        result = newsletters.get_newsletter_config(newsletter_id=newsletter_id)
+        result = newsletters.get_newsletter_config(newsletter_id=newsletter_id, mask_passwords=True)
         return result
 
     @cherrypy.expose
     @requireAuth(member_of("admin"))
     def get_newsletter_config_modal(self, newsletter_id=None, **kwargs):
-        result = newsletters.get_newsletter_config(newsletter_id=newsletter_id)
+        result = newsletters.get_newsletter_config(newsletter_id=newsletter_id, mask_passwords=True)
         return serve_template(templatename="newsletter_config.html", newsletter=result)
 
     @cherrypy.expose
@@ -5847,5 +5867,44 @@ class WebInterface(object):
 
     @cherrypy.expose
     @requireAuth()
-    def support(self, query='', **kwargs):
+    def support(self, **kwargs):
         return serve_template(templatename="support.html", title="Support")
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    @addtoapi()
+    def status(self, *args, **kwargs):
+        """ Get the current status of Tautulli.
+
+            ```
+            Required parameters:
+                None
+
+            Optional parameters:
+                check (str):        database
+
+            Returns:
+                json:
+                    {"result": "success",
+                     "message": "Ok",
+                     }
+            ```
+        """
+        cherrypy.response.headers['Cache-Control'] = "max-age=0,no-cache,no-store"
+        status = {'result': 'success', 'message': 'Ok'}
+
+        if args or kwargs:
+            if not cherrypy.request.path_info == '/api/v2' and plexpy.AUTH_ENABLED:
+                cherrypy.request.config['auth.require'] = []
+                check_auth()
+
+            if 'database' in (args[:1] or kwargs.get('check')):
+                result = database.integrity_check()
+                status.update(result)
+                if result['integrity_check'] == 'ok':
+                    status['message'] = 'Database ok'
+                else:
+                    status['result'] = 'error'
+                    status['message'] = 'Database not ok'
+
+        return status
